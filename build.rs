@@ -1,0 +1,324 @@
+use std::fs::{self, File};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::{Duration, Instant};
+
+const CHUNK_BYTES: &str = "10000000"; // 10 MiB
+const PROGRESS_INTERVAL: Duration = Duration::from_secs(3);
+const PROGRESS_STEP_BYTES: u64 = 50 * 1024 * 1024; // 50 MiB
+const MODEL_URL: &str = "https://huggingface.co/protectai/deberta-v3-base-prompt-injection-v2/resolve/main/onnx/model.onnx";
+const TOKENIZER_URL: &str = "https://huggingface.co/protectai/deberta-v3-base-prompt-injection-v2/resolve/main/onnx/tokenizer.json";
+
+fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+    progress("build started — preparing embedded model assets");
+
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
+    let cache_dir = out_dir.join("cache");
+    fs::create_dir_all(&cache_dir).expect("create cache dir");
+    progress(format!("cache dir: {}", cache_dir.display()));
+
+    let model_path = cache_dir.join("model.onnx");
+    let tokenizer_path = cache_dir.join("tokenizer.json");
+    let archive_path = out_dir.join("assets.tar.xz");
+
+    progress("step 1/4: download model files from Hugging Face (if not cached)");
+    download_if_needed("model.onnx", MODEL_URL, &model_path);
+    download_if_needed("tokenizer.json", TOKENIZER_URL, &tokenizer_path);
+
+    let needs_repack = !archive_path.exists()
+        || is_newer(&model_path, &archive_path)
+        || is_newer(&tokenizer_path, &archive_path);
+
+    if needs_repack {
+        progress("step 2/4: compress with tar -cJf (may take a few minutes)");
+        pack_and_compress(&cache_dir, &archive_path);
+        progress("step 3/4: split archive into ≤10 MiB embed chunks");
+        chunk_archive(&archive_path, &out_dir);
+        progress("step 4/4: write embedded_chunks.rs manifest");
+        write_embedded_manifest(&out_dir);
+        cleanup_stale_chunks(&out_dir);
+    } else if !out_dir.join("embedded_chunks.rs").exists() {
+        progress("archive up to date — re-chunking and writing manifest only");
+        chunk_archive(&archive_path, &out_dir);
+        write_embedded_manifest(&out_dir);
+        cleanup_stale_chunks(&out_dir);
+    } else {
+        progress("assets up to date — skipping pack/chunk");
+    }
+
+    let chunks = count_chunks(&out_dir);
+    let chunk_bytes = chunk_files_size(&out_dir);
+    progress(format!(
+        "build assets ready — {chunks} chunks, {} embedded",
+        format_bytes(chunk_bytes)
+    ));
+}
+
+fn progress(msg: impl AsRef<str>) {
+    println!("cargo:warning=[trypanophobe] {}", msg.as_ref());
+}
+
+fn format_bytes(n: u64) -> String {
+    const MIB: u64 = 1024 * 1024;
+    const GIB: u64 = 1024 * MIB;
+    if n >= GIB {
+        format!("{:.2} GiB", n as f64 / GIB as f64)
+    } else if n >= MIB {
+        format!("{:.1} MiB", n as f64 / MIB as f64)
+    } else if n >= 1024 {
+        format!("{:.1} KiB", n as f64 / 1024.0)
+    } else {
+        format!("{n} B")
+    }
+}
+
+fn download_if_needed(label: &str, url: &str, dest: &Path) {
+    if dest.exists() {
+        let meta = fs::metadata(dest).expect("metadata");
+        if meta.len() > 0 {
+            progress(format!(
+                "  cached {label}: {} ({})",
+                dest.display(),
+                format_bytes(meta.len())
+            ));
+            return;
+        }
+    }
+
+    progress(format!("  downloading {label} …"));
+    progress(format!("  url: {url}"));
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(3600))
+        .build()
+        .expect("http client");
+
+    let mut resp = client
+        .get(url)
+        .send()
+        .expect("download request")
+        .error_for_status()
+        .expect("download status");
+
+    let total = resp.content_length();
+    if let Some(total) = total {
+        progress(format!("  expected size: {}", format_bytes(total)));
+    } else {
+        progress("  expected size: unknown (no Content-Length)");
+    }
+
+    let mut file = File::create(dest).expect("create download file");
+    let mut buf = vec![0u8; 1024 * 1024];
+    let mut downloaded: u64 = 0;
+    let mut last_log = Instant::now();
+    let mut last_step: u64 = 0;
+
+    loop {
+        let n = resp.read(&mut buf).expect("read chunk");
+        if n == 0 {
+            break;
+        }
+        file.write_all(&buf[..n]).expect("write chunk");
+        downloaded += n as u64;
+
+        let by_time = last_log.elapsed() >= PROGRESS_INTERVAL;
+        let by_bytes = downloaded.saturating_sub(last_step) >= PROGRESS_STEP_BYTES;
+        if by_time || by_bytes {
+            log_download_progress(label, downloaded, total);
+            last_log = Instant::now();
+            last_step = downloaded;
+        }
+    }
+
+    progress(format!(
+        "  done {label}: {} ({})",
+        dest.display(),
+        format_bytes(downloaded)
+    ));
+}
+
+fn log_download_progress(label: &str, downloaded: u64, total: Option<u64>) {
+    match total {
+        Some(total) if total > 0 => {
+            let pct = (downloaded as f64 / total as f64) * 100.0;
+            progress(format!(
+                "  {label}: {} / {} ({pct:.1}%)",
+                format_bytes(downloaded),
+                format_bytes(total)
+            ));
+        }
+        _ => progress(format!(
+            "  {label}: {} received …",
+            format_bytes(downloaded)
+        )),
+    }
+}
+
+fn is_newer(src: &Path, dst: &Path) -> bool {
+    let Ok(src_meta) = fs::metadata(src) else {
+        return true;
+    };
+    let Ok(dst_meta) = fs::metadata(dst) else {
+        return true;
+    };
+    let Ok(src_mod) = src_meta.modified() else {
+        return true;
+    };
+    let Ok(dst_mod) = dst_meta.modified() else {
+        return true;
+    };
+    src_mod > dst_mod
+}
+
+/// `tar -cJf` — create an xz-compressed tarball of model + tokenizer.
+fn pack_and_compress(cache_dir: &Path, archive_xz: &Path) {
+    let cache = cache_dir
+        .canonicalize()
+        .unwrap_or_else(|_| cache_dir.to_path_buf());
+
+    progress(format!(
+        "  running: tar -cJf {} -C {} model.onnx tokenizer.json",
+        archive_xz.display(),
+        cache.display()
+    ));
+
+    let started = Instant::now();
+    let status = Command::new("tar")
+        .arg("-cJf")
+        .arg(archive_xz)
+        .arg("-C")
+        .arg(&cache)
+        .args(["model.onnx", "tokenizer.json"])
+        .status()
+        .expect("spawn tar");
+
+    assert!(status.success(), "tar -cJf failed with status {status}");
+
+    let size = archive_xz.metadata().unwrap().len();
+    progress(format!(
+        "  tar finished in {:.1}s → {} ({})",
+        started.elapsed().as_secs_f64(),
+        archive_xz.display(),
+        format_bytes(size)
+    ));
+}
+
+/// `split -b 10M` — slice the tarball into embeddable chunks (≤10 MiB each).
+fn chunk_archive(archive_xz: &Path, out_dir: &Path) {
+    remove_chunk_files(out_dir);
+
+    let prefix = out_dir.join("data_");
+    progress(format!(
+        "  running: split -b {CHUNK_BYTES} {} {}",
+        archive_xz.display(),
+        prefix.display()
+    ));
+
+    let started = Instant::now();
+    let status = Command::new("split")
+        .arg("-b")
+        .arg(CHUNK_BYTES)
+        .arg("-d")
+        .arg("-a")
+        .arg("2")
+        .arg("--additional-suffix=.bin")
+        .arg(archive_xz)
+        .arg(&prefix)
+        .status()
+        .expect("spawn split");
+
+    assert!(status.success(), "split failed with status {status}");
+
+    let count = count_chunks(out_dir);
+    progress(format!(
+        "  split finished in {:.1}s → {count} chunks ({})",
+        started.elapsed().as_secs_f64(),
+        format_bytes(chunk_files_size(out_dir))
+    ));
+}
+
+fn remove_chunk_files(out_dir: &Path) {
+    let Ok(entries) = fs::read_dir(out_dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with("data_") && name.ends_with(".bin") {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
+fn count_chunks(out_dir: &Path) -> usize {
+    let mut n = 0usize;
+    loop {
+        if !out_dir.join(format!("data_{n:02}.bin")).exists() {
+            break;
+        }
+        n += 1;
+    }
+    n
+}
+
+fn chunk_files_size(out_dir: &Path) -> u64 {
+    let mut total = 0u64;
+    for i in 0..count_chunks(out_dir) {
+        let path = out_dir.join(format!("data_{i:02}.bin"));
+        if let Ok(meta) = fs::metadata(path) {
+            total += meta.len();
+        }
+    }
+    total
+}
+
+fn write_embedded_manifest(out_dir: &Path) {
+    let mut chunks: Vec<String> = Vec::new();
+    let mut index = 0usize;
+    loop {
+        let name = format!("data_{index:02}.bin");
+        if !out_dir.join(&name).exists() {
+            break;
+        }
+        chunks.push(name);
+        index += 1;
+    }
+
+    let mut manifest = String::from("// @generated by build.rs — do not edit\n");
+    manifest.push_str("pub const CHUNKS: &[&[u8]] = &[\n");
+    for chunk in &chunks {
+        manifest.push_str(&format!(
+            "    include_bytes!(concat!(env!(\"OUT_DIR\"), \"/{chunk}\")),\n"
+        ));
+    }
+    manifest.push_str("];\n");
+
+    let path = out_dir.join("embedded_chunks.rs");
+    fs::write(&path, manifest).expect("write manifest");
+    progress(format!(
+        "  wrote {} ({} chunk entries)",
+        path.display(),
+        chunks.len()
+    ));
+}
+
+fn cleanup_stale_chunks(out_dir: &Path) {
+    let mut index = count_chunks(out_dir);
+    let mut removed = 0usize;
+    loop {
+        let name = format!("data_{index:02}.bin");
+        let path = out_dir.join(&name);
+        if path.exists() {
+            fs::remove_file(path).ok();
+            removed += 1;
+            index += 1;
+        } else {
+            break;
+        }
+    }
+    if removed > 0 {
+        progress(format!("  removed {removed} stale chunk file(s)"));
+    }
+}

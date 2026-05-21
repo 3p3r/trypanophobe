@@ -1,0 +1,29 @@
+[package]
+name = "trypanophobe"
+version = "0.1.0"
+edition = "2021"
+description = "Prompt injection detector (CLI + REST)"
+license = "MIT"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+ndarray = "0.17"
+ort = { version = "=2.0.0-rc.12", default-features = false, features = ["ndarray", "std", "download-binaries", "copy-dylibs", "tls-rustls", "api-24"] }
+salvo = { version = "0.93", features = ["oapi", "affix-state"] }
+salvo-cors = "0.93"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tar = "0.4"
+tokenizers = "0.23"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+whatlang = "0.18"
+xz2 = "0.1"
+
+[build-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+
+[profile.release]
+lto = "thin"
