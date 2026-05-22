@@ -6,7 +6,7 @@ Check user prompts for injection attempts before they reach your model. One bina
 
 ## Prerequisites
 
-At least 700MB of free disk space (for the binary itself) and 1GB of RAM for (BERT classification).
+At least 700MB of free disk space (for the binary itself) and 1GB of RAM (for BERT classification).
 
 ## Quick start
 

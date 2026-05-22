@@ -1,31 +1,30 @@
 # Multi-platform Rust cross-compilation image (1.x tracks deps e.g. salvo >= 1.92)
 FROM rust:1-bookworm
 
-# Install cross-compilation toolchains and build.rs deps (tar, xz, split)
+# Cross linkers for Linux GNU targets + clang for cargo-xwin (Windows MSVC)
 RUN apt-get update && apt-get install -y \
     gcc-aarch64-linux-gnu \
+    g++-aarch64-linux-gnu \
     gcc-x86-64-linux-gnu \
     libc6-dev-arm64-cross \
     libc6-dev-amd64-cross \
+    clang \
     tar \
     xz-utils \
-    coreutils \
     && rm -rf /var/lib/apt/lists/*
 
-# ONNX Runtime prebuilt binaries: Linux GNU + Windows MSVC only (see ort-sys dist.txt)
 RUN rustup target add \
     x86_64-unknown-linux-gnu \
     aarch64-unknown-linux-gnu \
     x86_64-pc-windows-msvc
 
-RUN curl -sSL https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz | tar -xJ -C /opt \
-    && ln -s /opt/zig-linux-x86_64-0.13.0/zig /usr/local/bin/zig
-RUN cargo install cargo-zigbuild cargo-xwin --locked
+RUN cargo install cargo-xwin --locked
 
 RUN mkdir -p /.cargo
 RUN printf '%s\n' \
     '[target.aarch64-unknown-linux-gnu]' \
     'linker = "aarch64-linux-gnu-gcc"' \
+    'rustflags = ["-C", "link-arg=-lstdc++"]' \
     > /.cargo/config.toml
 
 WORKDIR /build

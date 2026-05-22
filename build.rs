@@ -40,7 +40,7 @@ fn main() {
     if needs_repack {
         progress("step 2/5: xz-compress with tar -cJf (may take a few minutes)");
         pack_and_compress(&cache_dir, &archive_path, &model_path, &tokenizer_path);
-        progress("step 3/5: split archive into ≤10 MiB embed chunks");
+        progress("step 3/5: chunk archive into ≤10 MiB embed slices");
         chunk_archive(&archive_path, &out_dir);
         progress("step 4/5: write embedded_chunks.rs manifest");
         write_embedded_manifest(&out_dir);
@@ -234,35 +234,27 @@ fn pack_and_compress(cache_dir: &Path, archive_xz: &Path, model_path: &Path, tok
     ));
 }
 
-/// `split -b 10M` — slice the tarball into embeddable chunks (≤10 MiB each).
+/// Slice the tarball into embeddable chunks (≤10 MiB each). Pure Rust so macOS/Linux agree.
 fn chunk_archive(archive_xz: &Path, out_dir: &Path) {
     remove_chunk_files(out_dir);
 
-    let prefix = out_dir.join("data_");
+    const CHUNK_SIZE: usize = 10_000_000;
     progress(format!(
-        "  running: split -b {CHUNK_BYTES} {} {}",
-        archive_xz.display(),
-        prefix.display()
+        "  chunking {} into ≤{CHUNK_BYTES} slices",
+        archive_xz.display()
     ));
 
     let started = Instant::now();
-    let status = Command::new("split")
-        .arg("-b")
-        .arg(CHUNK_BYTES)
-        .arg("-d")
-        .arg("-a")
-        .arg("2")
-        .arg("--additional-suffix=.bin")
-        .arg(archive_xz)
-        .arg(&prefix)
-        .status()
-        .expect("spawn split");
+    let data = fs::read(archive_xz).expect("read assets.tar.xz");
+    let mut index = 0usize;
+    for chunk in data.chunks(CHUNK_SIZE) {
+        let path = out_dir.join(format!("data_{index:02}.bin"));
+        fs::write(&path, chunk).expect("write chunk");
+        index += 1;
+    }
 
-    assert!(status.success(), "split failed with status {status}");
-
-    let count = count_chunks(out_dir);
     progress(format!(
-        "  split finished in {:.1}s → {count} chunks ({})",
+        "  chunking finished in {:.1}s → {index} chunks ({})",
         started.elapsed().as_secs_f64(),
         format_bytes(chunk_files_size(out_dir))
     ));
