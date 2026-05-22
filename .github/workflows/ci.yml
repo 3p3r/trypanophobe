@@ -145,9 +145,11 @@ jobs:
           path: artifacts/${{ matrix.binary }}
           retention-days: 7
 
+  # Re-enable with quality after all cross-compile matrix jobs pass.
   nightly-release:
+    if: false
     name: Nightly release
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: cross-compile
     runs-on: ubuntu-latest
     timeout-minutes: 15
