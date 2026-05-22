@@ -32,7 +32,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: System deps
-        run: sudo apt-get update && sudo apt-get install -y tar xz-utils curl split
+        run: sudo apt-get update && sudo apt-get install -y tar xz-utils curl
 
       - name: Run unit tests
         run: cargo test

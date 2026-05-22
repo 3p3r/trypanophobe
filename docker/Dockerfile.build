@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     libc6-dev-amd64-cross \
     tar \
     xz-utils \
-    split \
+    coreutils \
     && rm -rf /var/lib/apt/lists/*
 
 # ONNX Runtime prebuilt binaries: Linux GNU + Windows MSVC only (see ort-sys dist.txt)
