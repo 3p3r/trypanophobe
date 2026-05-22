@@ -73,3 +73,57 @@ fn collect_prompt_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn literal_args() {
+        let items = collect_check_items(&["hello world".into()]).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].name, "literal:1");
+        assert_eq!(items[0].text, "hello world");
+    }
+
+    #[test]
+    fn reads_prompt_file_and_directory() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("a.prompt"), "alpha").unwrap();
+        let sub = dir.path().join("sub");
+        fs::create_dir(&sub).unwrap();
+        fs::write(sub.join("b.PROMPT"), "beta").unwrap();
+
+        let file_items = collect_check_items(&[dir.path().join("a.prompt").display().to_string()])
+            .unwrap();
+        assert_eq!(file_items[0].text, "alpha");
+
+        let dir_items =
+            collect_check_items(&[dir.path().to_string_lossy().into_owned()]).unwrap();
+        assert_eq!(dir_items.len(), 2);
+        assert!(dir_items.iter().any(|i| i.text == "alpha"));
+        assert!(dir_items.iter().any(|i| i.text == "beta"));
+    }
+
+    #[test]
+    fn empty_directory_errors() {
+        let dir = tempdir().unwrap();
+        let err = collect_check_items(&[dir.path().to_string_lossy().into_owned()]).unwrap_err();
+        assert!(err.to_string().contains("no .prompt files"));
+    }
+
+    #[test]
+    fn no_inputs_errors() {
+        let err = collect_check_items(&[]).unwrap_err();
+        assert!(err.to_string().contains("no inputs"));
+    }
+
+    #[test]
+    fn batch_literals_numbered() {
+        let items = collect_check_items(&["one".into(), "two".into()]).unwrap();
+        assert_eq!(items[0].name, "literal:1");
+        assert_eq!(items[1].name, "literal:2");
+    }
+}

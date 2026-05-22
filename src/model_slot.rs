@@ -117,3 +117,42 @@ impl DetectorSlot {
         }
     }
 }
+
+#[cfg(test)]
+impl DetectorSlot {
+    pub fn with_failed(message: impl Into<String>) -> SharedDetector {
+        Arc::new(DetectorSlot {
+            state: Mutex::new(SlotState::Failed(message.into())),
+            ready: Condvar::new(),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wait_ready_surfaces_load_failure() {
+        let slot = DetectorSlot::with_failed("disk full");
+        let err = slot.wait_ready().unwrap_err();
+        assert!(err.to_string().contains("disk full"));
+    }
+
+    #[test]
+    fn new_slot_starts_idle() {
+        let slot = DetectorSlot::new();
+        assert!(matches!(*slot.state.lock().unwrap(), SlotState::Idle));
+    }
+
+    #[test]
+    fn start_prewarm_when_already_loading_is_noop() {
+        let slot = DetectorSlot::new();
+        {
+            let mut g = slot.state.lock().unwrap();
+            *g = SlotState::Loading;
+        }
+        slot.start_prewarm();
+        assert!(matches!(*slot.state.lock().unwrap(), SlotState::Loading));
+    }
+}

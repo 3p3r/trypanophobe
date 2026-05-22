@@ -1,20 +1,9 @@
-mod assets;
-mod detector;
-mod http;
-mod inputs;
-mod model_slot;
-mod types;
-
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use detector::{is_english, Detector};
-use http::{build_router, build_service, mount_openapi};
-use inputs::{collect_check_items, CheckItem};
-use model_slot::DetectorSlot;
 use salvo::conn::TcpListener;
 use salvo::prelude::*;
 use tracing_subscriber::EnvFilter;
-use types::{version_info, CheckResult};
+use trypanophobe::{app_service, run_check_batch, version_info, CheckBatchOutcome, DetectorSlot};
 
 #[derive(Parser)]
 #[command(name = "trypanophobe", about = "Prompt injection detector")]
@@ -60,57 +49,24 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
     match cli.command {
-        Command::Check { inputs } => run_check_batch(&inputs),
+        Command::Check { inputs } => {
+            if run_check_batch(&inputs)? == CheckBatchOutcome::Failed {
+                std::process::exit(1);
+            }
+        }
         Command::Version => {
             let v = version_info();
             println!("{} {}", v.name, v.version);
             println!("model: {}", v.model);
-            Ok(())
         }
         Command::Serve {
             host,
             port,
             prewarm,
             cors,
-        } => run_serve(&host, port, prewarm, cors).await,
-    }
-}
-
-fn run_check_batch(args: &[String]) -> Result<()> {
-    let items = collect_check_items(args)?;
-    let mut detector: Option<Detector> = None;
-    let mut failed = false;
-
-    for item in &items {
-        let result = check_one_item(item, &mut detector)?;
-        let status = if result.rejected {
-            "rejected"
-        } else if result.is_injection {
-            "injection"
-        } else {
-            "ok"
-        };
-        tracing::info!(target = %item.name, %status, "check result");
-
-        if result.rejected || result.is_injection {
-            failed = true;
-        }
-    }
-
-    if failed {
-        std::process::exit(1);
+        } => run_serve(&host, port, prewarm, cors).await?,
     }
     Ok(())
-}
-
-fn check_one_item(item: &CheckItem, detector: &mut Option<Detector>) -> Result<CheckResult> {
-    if !is_english(&item.text) {
-        return Ok(CheckResult::rejected_non_english());
-    }
-    if detector.is_none() {
-        *detector = Some(Detector::new()?);
-    }
-    detector.as_mut().unwrap().check(&item.text)
 }
 
 async fn run_serve(host: &str, port: u16, prewarm: bool, cors: Vec<String>) -> Result<()> {
@@ -122,9 +78,7 @@ async fn run_serve(host: &str, port: u16, prewarm: bool, cors: Vec<String>) -> R
         tracing::info!("model loads on first English /api/check (use --prewarm to load at startup)");
     }
 
-    let router = mount_openapi(build_router(slot));
-    let service = build_service(router, cors);
-
+    let service = app_service(slot, cors);
     let addr: &'static str = Box::leak(format!("{host}:{port}").into_boxed_str());
     tracing::info!(%addr, "listening — open http://{addr}/ for API docs");
 

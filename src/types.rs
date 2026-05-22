@@ -74,3 +74,48 @@ impl CheckResult {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use salvo::http::StatusCode;
+
+    #[test]
+    fn rejected_non_english_shape() {
+        let r = CheckResult::rejected_non_english();
+        assert!(r.rejected);
+        assert!(!r.is_injection);
+        assert_eq!(r.label, "REJECTED");
+        assert_eq!(r.http_status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn http_status_variants() {
+        assert_eq!(
+            CheckResult::from_model("SAFE", false, 0.9).http_status(),
+            StatusCode::ACCEPTED
+        );
+        assert_eq!(
+            CheckResult::from_model("INJECTION", true, 0.9).http_status(),
+            StatusCode::NOT_ACCEPTABLE
+        );
+    }
+
+    #[test]
+    fn version_info_fields() {
+        let v = version_info();
+        assert_eq!(v.name, "trypanophobe");
+        assert_eq!(v.version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(v.model, MODEL_ID);
+    }
+
+    #[test]
+    fn check_result_serializes_score() {
+        let safe = CheckResult::from_model("SAFE", false, 0.95);
+        let json = serde_json::to_string(&safe).unwrap();
+        assert!(json.contains("\"score\":0.95"));
+        let rej = CheckResult::rejected_non_english();
+        let json = serde_json::to_string(&rej).unwrap();
+        assert!(!json.contains("score"));
+    }
+}

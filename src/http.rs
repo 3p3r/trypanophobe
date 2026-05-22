@@ -1,4 +1,4 @@
-use crate::detector::is_english;
+use crate::language::is_english;
 use crate::model_slot::SharedDetector;
 use crate::types::{version_info, CheckRequest, CheckResult, ErrorResponse, VersionInfo};
 use salvo::http::StatusCode;
@@ -114,4 +114,88 @@ pub fn mount_openapi(api_router: Router) -> Router {
                 .into_router("/swagger-ui"),
         )
         .push(Router::with_path("/").get(root_redirect))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model_slot::DetectorSlot;
+    use salvo::http::StatusCode;
+    use salvo::test::{ResponseExt, TestClient};
+
+    fn service(cors: Vec<&str>) -> salvo::Service {
+        build_service(
+            mount_openapi(build_router(DetectorSlot::new())),
+            cors.into_iter().map(str::to_string).collect(),
+        )
+    }
+
+    #[tokio::test]
+    async fn root_redirects_to_swagger() {
+        let mut res = TestClient::get("http://localhost/")
+            .send(&service(vec!["*"]))
+            .await;
+        assert_eq!(res.status_code, Some(StatusCode::SEE_OTHER));
+        let loc = res.headers().get("location").unwrap().to_str().unwrap();
+        assert!(loc.contains("/swagger-ui"));
+    }
+
+    #[tokio::test]
+    async fn version_endpoint() {
+        let mut res = TestClient::get("http://localhost/api/version")
+            .send(&service(vec!["*"]))
+            .await;
+        assert_eq!(res.status_code, Some(StatusCode::OK));
+        let body: VersionInfo = res.take_json().await.unwrap();
+        assert_eq!(body.name, "trypanophobe");
+    }
+
+    #[tokio::test]
+    async fn check_empty_text_is_bad_request() {
+        let mut res = TestClient::post("http://localhost/api/check")
+            .json(&CheckRequest {
+                text: "   ".into(),
+            })
+            .send(&service(vec!["*"]))
+            .await;
+        assert_eq!(res.status_code, Some(StatusCode::BAD_REQUEST));
+        let body: ErrorResponse = res.take_json().await.unwrap();
+        assert!(body.error.contains("empty"));
+    }
+
+    #[tokio::test]
+    async fn check_non_english_is_rejected_without_model() {
+        let mut res = TestClient::post("http://localhost/api/check")
+            .json(&CheckRequest {
+                text: "Bonjour le monde".into(),
+            })
+            .send(&service(vec!["*"]))
+            .await;
+        assert_eq!(res.status_code, Some(StatusCode::BAD_REQUEST));
+        let body: CheckResult = res.take_json().await.unwrap();
+        assert!(body.rejected);
+        assert_eq!(body.label, "REJECTED");
+    }
+
+    #[tokio::test]
+    async fn cors_allows_specific_origin() {
+        let mut res = TestClient::options("http://localhost/api/version")
+            .add_header("Origin", "https://app.example", true)
+            .add_header("Access-Control-Request-Method", "GET", true)
+            .send(&service(vec!["https://app.example"]))
+            .await;
+        assert!(
+            matches!(
+                res.status_code,
+                Some(StatusCode::OK) | Some(StatusCode::NO_CONTENT)
+            )
+        );
+        let allow = res
+            .headers()
+            .get("access-control-allow-origin")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert_eq!(allow, "https://app.example");
+    }
 }
