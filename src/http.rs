@@ -1,6 +1,6 @@
 use crate::detector::is_english;
 use crate::model_slot::SharedDetector;
-use crate::types::{CheckRequest, CheckResult, ErrorResponse, VersionInfo, MODEL_ID};
+use crate::types::{version_info, CheckRequest, CheckResult, ErrorResponse, VersionInfo};
 use salvo::http::StatusCode;
 use salvo::oapi::extract::*;
 use salvo::prelude::*;
@@ -73,11 +73,7 @@ async fn check(depot: &mut Depot, body: JsonBody<CheckRequest>, res: &mut Respon
 
 #[endpoint(tags("api"))]
 fn version() -> Json<VersionInfo> {
-    Json(VersionInfo {
-        name: "trypanophobe".into(),
-        version: env!("CARGO_PKG_VERSION").into(),
-        model: MODEL_ID.into(),
-    })
+    Json(version_info())
 }
 
 pub fn build_service(router: Router, cors_origins: Vec<String>) -> Service {

@@ -27,6 +27,14 @@ pub struct VersionInfo {
     pub model: String,
 }
 
+pub fn version_info() -> VersionInfo {
+    VersionInfo {
+        name: "trypanophobe".into(),
+        version: env!("CARGO_PKG_VERSION").into(),
+        model: MODEL_ID.into(),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ErrorResponse {
     pub error: String,

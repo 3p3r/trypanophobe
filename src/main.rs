@@ -14,7 +14,7 @@ use model_slot::DetectorSlot;
 use salvo::conn::TcpListener;
 use salvo::prelude::*;
 use tracing_subscriber::EnvFilter;
-use types::CheckResult;
+use types::{version_info, CheckResult};
 
 #[derive(Parser)]
 #[command(name = "trypanophobe", about = "Prompt injection detector")]
@@ -31,6 +31,8 @@ enum Command {
         #[arg(value_name = "PATH_OR_TEXT", num_args = 1..)]
         inputs: Vec<String>,
     },
+    /// Print version and model id
+    Version,
     /// Start the REST API server
     Serve {
         #[arg(long, default_value = "127.0.0.1")]
@@ -59,6 +61,12 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Check { inputs } => run_check_batch(&inputs),
+        Command::Version => {
+            let v = version_info();
+            println!("{} {}", v.name, v.version);
+            println!("model: {}", v.model);
+            Ok(())
+        }
         Command::Serve {
             host,
             port,
