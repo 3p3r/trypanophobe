@@ -78,7 +78,7 @@ jobs:
             name: Windows x64
             target: x86_64-pc-windows-msvc
             binary: trypanophobe-win32-x64.exe
-            build_cmd: cargo xwin build --release --target x86_64-pc-windows-msvc
+            build_cmd: bash docker/windows-cross-build.sh
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
