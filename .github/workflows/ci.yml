@@ -18,7 +18,7 @@ jobs:
   quality:
     name: Quality
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,7 +32,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: System deps
-        run: sudo apt-get update && sudo apt-get install -y tar xz-utils curl
+        run: sudo apt-get update && sudo apt-get install -y tar xz-utils curl split
 
       - name: Run unit tests
         run: cargo test
@@ -48,9 +48,9 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: quality
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 180
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -58,43 +58,25 @@ jobs:
             name: Linux x64
             target: x86_64-unknown-linux-gnu
             binary: trypanophobe-linux-x64
-            use_zigbuild: true
+            build_cmd: cargo zigbuild --release --target x86_64-unknown-linux-gnu
           - os: ubuntu-latest
             use_docker: true
             name: Linux ARM64
             target: aarch64-unknown-linux-gnu
             binary: trypanophobe-linux-arm64
-            use_zigbuild: true
-          - os: ubuntu-latest
-            use_docker: true
-            name: Linux musl x64
-            target: x86_64-unknown-linux-musl
-            binary: trypanophobe-linux-musl-x64
-            use_zigbuild: true
-          - os: ubuntu-latest
-            use_docker: true
-            name: Linux musl ARM64
-            target: aarch64-unknown-linux-musl
-            binary: trypanophobe-linux-musl-arm64
-            use_zigbuild: true
-          - os: macos-latest
-            use_docker: false
-            name: macOS x64
-            target: x86_64-apple-darwin
-            binary: trypanophobe-darwin-x64
-            use_zigbuild: false
+            build_cmd: cargo zigbuild --release --target aarch64-unknown-linux-gnu
           - os: macos-latest
             use_docker: false
             name: macOS ARM64
             target: aarch64-apple-darwin
             binary: trypanophobe-darwin-arm64
-            use_zigbuild: false
+            build_cmd: cargo build --release --target aarch64-apple-darwin
           - os: ubuntu-latest
             use_docker: true
             name: Windows x64
-            target: x86_64-pc-windows-gnu
+            target: x86_64-pc-windows-msvc
             binary: trypanophobe-win32-x64.exe
-            use_zigbuild: false
+            build_cmd: cargo xwin build --release --target x86_64-pc-windows-msvc
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -106,8 +88,6 @@ jobs:
       - name: Setup Rust toolchain
         if: ${{ !matrix.use_docker }}
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
       - name: Cache Rust build artifacts
         if: ${{ !matrix.use_docker }}
@@ -118,37 +98,32 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .cargo-home
-          key: cross-cargo-v2-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cross-cargo-v3-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            cross-cargo-v2-${{ matrix.target }}-
+            cross-cargo-v3-${{ matrix.target }}-
 
       - name: Cache cross-target build dir
         uses: actions/cache@v4
         with:
           path: cross-target/${{ matrix.target }}
-          key: cross-target-v2-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cross-target-v3-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            cross-target-v2-${{ matrix.target }}-
+            cross-target-v3-${{ matrix.target }}-
 
       - name: Cross-compile release binary (Docker)
         if: matrix.use_docker
         run: |
-          if [[ "${{ matrix.use_zigbuild }}" == "true" ]]; then
-            BUILD_CMD="cargo zigbuild --release --target ${{ matrix.target }}"
-          else
-            BUILD_CMD="cargo build --release --target ${{ matrix.target }}"
-          fi
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/build" -w /build \
             -e CARGO_HOME=/build/.cargo-home \
             -e CARGO_TARGET_DIR=/build/cross-target \
-            trypanophobe-build:ci -c "rustup target add ${{ matrix.target }} && ${BUILD_CMD}"
+            trypanophobe-build:ci -c "rustup target add ${{ matrix.target }} && ${{ matrix.build_cmd }}"
 
       - name: Cross-compile release binary (macOS)
         if: ${{ !matrix.use_docker }}
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/cross-target
-        run: cargo build --release --target ${{ matrix.target }}
+        run: ${{ matrix.build_cmd }}
 
       - name: Copy binary to artifacts
         run: |
@@ -199,9 +174,6 @@ jobs:
           EXPECTED_BINARIES=(
             trypanophobe-linux-x64
             trypanophobe-linux-arm64
-            trypanophobe-linux-musl-x64
-            trypanophobe-linux-musl-arm64
-            trypanophobe-darwin-x64
             trypanophobe-darwin-arm64
             trypanophobe-win32-x64.exe
           )
@@ -225,7 +197,7 @@ jobs:
             echo "Error: $ERRORS binary issues found"
             exit 1
           fi
-          echo "All 7 platform binaries present and valid"
+          echo "All platform binaries present and valid"
 
       - name: Create or update nightly release
         env:

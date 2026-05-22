@@ -58,17 +58,14 @@ GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on 
 
 - `cargo test`, `./coverage.sh` (90% line coverage on testable library code), and `./smoke.sh`
 
-On push to `main`, CI also cross-compiles release binaries for Linux (GNU and musl), macOS, and Windows using [`docker/Dockerfile.build`](docker/Dockerfile.build), then publishes them on the **nightly** pre-release:
+On push to `main`, CI cross-compiles release binaries using [`docker/Dockerfile.build`](docker/Dockerfile.build) (Linux/Windows) and native macOS runners, then publishes them on the **nightly** pre-release. Targets follow [ONNX Runtime prebuilt availability](https://ort.pyke.io/setup/linking) (no musl or Intel-mac ORT binaries).
 
 | Artifact | Target |
 |----------|--------|
 | [trypanophobe-linux-x64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-linux-x64) | x86_64-unknown-linux-gnu |
 | [trypanophobe-linux-arm64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-linux-arm64) | aarch64-unknown-linux-gnu |
-| [trypanophobe-linux-musl-x64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-linux-musl-x64) | x86_64-unknown-linux-musl |
-| [trypanophobe-linux-musl-arm64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-linux-musl-arm64) | aarch64-unknown-linux-musl |
-| [trypanophobe-darwin-x64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-darwin-x64) | x86_64-apple-darwin |
-| [trypanophobe-darwin-arm64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-darwin-arm64) | aarch64-apple-darwin |
-| [trypanophobe-win32-x64.exe](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-win32-x64.exe) | x86_64-pc-windows-gnu |
+| [trypanophobe-darwin-arm64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-darwin-arm64) | aarch64-apple-darwin (Apple Silicon) |
+| [trypanophobe-win32-x64.exe](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-win32-x64.exe) | x86_64-pc-windows-msvc |
 
 ## License
 
