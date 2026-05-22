@@ -78,7 +78,7 @@ jobs:
             name: Windows x64
             target: x86_64-pc-windows-msvc
             binary: trypanophobe-win32-x64.exe
-            build_cmd: cargo xwin build --release --target x86_64-pc-windows-msvc --xwin-arch x86_64
+            build_cmd: cargo xwin build --release --target x86_64-pc-windows-msvc
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -100,17 +100,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .cargo-home
-          key: cross-cargo-v3-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cross-cargo-v4-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            cross-cargo-v3-${{ matrix.target }}-
+            cross-cargo-v4-${{ matrix.target }}-
 
       - name: Cache cross-target build dir
         uses: actions/cache@v4
         with:
           path: cross-target/${{ matrix.target }}
-          key: cross-target-v3-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cross-target-v4-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            cross-target-v3-${{ matrix.target }}-
+            cross-target-v4-${{ matrix.target }}-
 
       - name: Cross-compile release binary (Docker)
         if: matrix.use_docker
