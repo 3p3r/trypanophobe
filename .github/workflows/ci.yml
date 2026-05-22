@@ -15,9 +15,7 @@ permissions:
   contents: read
 
 jobs:
-  # Re-enable after cross-compile is green (saves ~20m per push while iterating).
   quality:
-    if: false
     name: Quality
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -48,7 +46,7 @@ jobs:
   cross-compile:
     name: Cross-compile (${{ matrix.name }})
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    # needs: quality
+    needs: quality
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180
     strategy:
@@ -145,11 +143,9 @@ jobs:
           path: artifacts/${{ matrix.binary }}
           retention-days: 7
 
-  # Re-enable with quality after all cross-compile matrix jobs pass.
   nightly-release:
-    if: false
     name: Nightly release
-    # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: cross-compile
     runs-on: ubuntu-latest
     timeout-minutes: 15
