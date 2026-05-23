@@ -142,10 +142,6 @@ jobs:
             cp "${RELEASE_DIR}/trypanophobe" "artifacts/${{ matrix.binary }}"
             chmod +x "artifacts/${{ matrix.binary }}"
           fi
-          if [[ "${{ matrix.target }}" == "x86_64-apple-darwin" ]]; then
-            cp "${RELEASE_DIR}"/libonnxruntime*.dylib artifacts/ 2>/dev/null || true
-          fi
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -179,7 +175,7 @@ jobs:
       - name: Prepare dist directory
         run: |
           mkdir -p dist
-          find artifacts -type f \( -name 'trypanophobe-*' -o -name 'trypanophobe-*.exe' -o -name 'libonnxruntime*.dylib' \) -exec cp {} dist/ \;
+          find artifacts -type f \( -name 'trypanophobe-*' -o -name 'trypanophobe-*.exe' \) -exec cp {} dist/ \;
           chmod +x dist/trypanophobe-* 2>/dev/null || true
           echo "Binaries in dist/:"
           ls -la dist/

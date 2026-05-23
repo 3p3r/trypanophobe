@@ -60,14 +60,14 @@ GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on 
 
 On push to `main`, CI cross-compiles release binaries using [`docker/Dockerfile.build`](docker/Dockerfile.build) (Linux/Windows; Windows uses [`docker/windows-cross-build.sh`](docker/windows-cross-build.sh) for xwin SDK lib casing) and native macOS runners (`macos-latest` / `macos-15-intel`), then publishes them on the **nightly** pre-release.
 
-Intel macOS (`x86_64-apple-darwin`) has no ort 2.x prebuilt binaries; CI and local builds use [`docker/darwin-x64-build.sh`](docker/darwin-x64-build.sh) with Homebrew `onnxruntime` (`brew install onnxruntime`). Ship `libonnxruntime*.dylib` next to the binary on that platform.
+Intel macOS (`x86_64-apple-darwin`) has no ort 2.x prebuilt binaries; the nightly binary is built with [`docker/darwin-x64-build.sh`](docker/darwin-x64-build.sh) and links Homebrew ONNX Runtime at runtime (`brew install onnxruntime` required on Intel Macs).
 
 | Artifact | Target |
 |----------|--------|
 | [trypanophobe-linux-x64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-linux-x64) | x86_64-unknown-linux-gnu |
 | [trypanophobe-linux-arm64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-linux-arm64) | aarch64-unknown-linux-gnu |
 | [trypanophobe-darwin-arm64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-darwin-arm64) | aarch64-apple-darwin (Apple Silicon) |
-| [trypanophobe-darwin-x64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-darwin-x64) | x86_64-apple-darwin (Intel; requires bundled `libonnxruntime*.dylib`) |
+| [trypanophobe-darwin-x64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-darwin-x64) | x86_64-apple-darwin (Intel; requires `brew install onnxruntime`) |
 | [trypanophobe-win32-x64.exe](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-win32-x64.exe) | x86_64-pc-windows-msvc |
 
 After cross-compiles, CI runs [`scripts/ci-cleanup.sh`](scripts/ci-cleanup.sh) so `cross-target/` and `.cargo-home/` do not accumulate on runners.

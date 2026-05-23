@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Intel macOS: ort 2.x has no prebuilt binaries — link Homebrew ONNX Runtime dynamically.
+# Release is a single executable; requires `brew install onnxruntime` at runtime.
 set -euo pipefail
 
 if [[ "$(uname -m)" != "x86_64" ]]; then
@@ -42,14 +43,4 @@ export CFLAGS="${CFLAGS:--isysroot ${SDKROOT}}"
 export CXXFLAGS="${CXXFLAGS:--isysroot ${SDKROOT} -I${SDKROOT}/usr/include/c++/v1}"
 
 cd "${repo_root}"
-cargo build --release "$@"
-
-release="${CARGO_TARGET_DIR}/release"
-bin="${release}/trypanophobe"
-dylib="$(cd "${ort_lib}" && readlink libonnxruntime.dylib)"
-dylib_name="$(basename "${dylib}")"
-cp "${ort_lib}/${dylib}" "${release}/${dylib_name}"
-
-# Rewrite install name so the binary loads ONNX Runtime from the same directory as the executable.
-install_name_tool -change "${ort_lib}/libonnxruntime.1.dylib" "@executable_path/${dylib_name}" "${bin}" 2>/dev/null \
-	|| install_name_tool -change "${ort_lib}/libonnxruntime.dylib" "@executable_path/${dylib_name}" "${bin}"
+exec cargo build --release "$@"
