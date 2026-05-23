@@ -59,24 +59,35 @@ jobs:
             target: x86_64-unknown-linux-gnu
             binary: trypanophobe-linux-x64
             build_cmd: cargo build --release --target x86_64-unknown-linux-gnu
+            install_ort: false
           - os: ubuntu-latest
             use_docker: true
             name: Linux ARM64
             target: aarch64-unknown-linux-gnu
             binary: trypanophobe-linux-arm64
             build_cmd: cargo build --release --target aarch64-unknown-linux-gnu
+            install_ort: false
           - os: macos-latest
             use_docker: false
             name: macOS ARM64
             target: aarch64-apple-darwin
             binary: trypanophobe-darwin-arm64
             build_cmd: cargo build --release --target aarch64-apple-darwin
+            install_ort: false
+          - os: macos-15-intel
+            use_docker: false
+            name: macOS x64
+            target: x86_64-apple-darwin
+            binary: trypanophobe-darwin-x64
+            build_cmd: bash docker/darwin-x64-build.sh
+            install_ort: true
           - os: ubuntu-latest
             use_docker: true
             name: Windows x64
             target: x86_64-pc-windows-msvc
             binary: trypanophobe-win32-x64.exe
             build_cmd: bash docker/windows-cross-build.sh
+            install_ort: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -102,13 +113,9 @@ jobs:
           restore-keys: |
             cross-cargo-v4-${{ matrix.target }}-
 
-      - name: Cache cross-target build dir
-        uses: actions/cache@v4
-        with:
-          path: cross-target/${{ matrix.target }}
-          key: cross-target-v4-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cross-target-v4-${{ matrix.target }}-
+      - name: Install ONNX Runtime (macOS x64)
+        if: matrix.install_ort
+        run: brew install onnxruntime
 
       - name: Cross-compile release binary (Docker)
         if: matrix.use_docker
@@ -135,13 +142,20 @@ jobs:
             cp "${RELEASE_DIR}/trypanophobe" "artifacts/${{ matrix.binary }}"
             chmod +x "artifacts/${{ matrix.binary }}"
           fi
+          if [[ "${{ matrix.target }}" == "x86_64-apple-darwin" ]]; then
+            cp "${RELEASE_DIR}"/libonnxruntime*.dylib artifacts/ 2>/dev/null || true
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.binary }}
-          path: artifacts/${{ matrix.binary }}
+          path: artifacts/
           retention-days: 7
+
+      - name: Prune build trees
+        if: always()
+        run: bash scripts/ci-cleanup.sh
 
   nightly-release:
     name: Nightly release
@@ -164,7 +178,7 @@ jobs:
       - name: Prepare dist directory
         run: |
           mkdir -p dist
-          find artifacts -type f \( -name 'trypanophobe-*' -o -name 'trypanophobe-*.exe' \) -exec cp {} dist/ \;
+          find artifacts -type f \( -name 'trypanophobe-*' -o -name 'trypanophobe-*.exe' -o -name 'libonnxruntime*.dylib' \) -exec cp {} dist/ \;
           chmod +x dist/trypanophobe-* 2>/dev/null || true
           echo "Binaries in dist/:"
           ls -la dist/
@@ -175,6 +189,7 @@ jobs:
             trypanophobe-linux-x64
             trypanophobe-linux-arm64
             trypanophobe-darwin-arm64
+            trypanophobe-darwin-x64
             trypanophobe-win32-x64.exe
           )
           MIN_SIZE=100000
