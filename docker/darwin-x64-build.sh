@@ -23,7 +23,8 @@ if [[ -z "${ort_lib}" || ! -f "${ort_lib}/libonnxruntime.dylib" ]]; then
 fi
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${repo_root}/cross-target/x86_64-apple-darwin}"
+# Always use the x86_64 layout (workflow may set CARGO_TARGET_DIR=cross-target for ARM).
+export CARGO_TARGET_DIR="${repo_root}/cross-target/x86_64-apple-darwin"
 export ORT_LIB_PATH="${ort_lib}"
 export ORT_PREFER_DYNAMIC_LINK=1
 export DYLD_FALLBACK_LIBRARY_PATH="${ort_lib}:${DYLD_FALLBACK_LIBRARY_PATH:-}"
