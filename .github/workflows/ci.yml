@@ -59,35 +59,30 @@ jobs:
             target: x86_64-unknown-linux-gnu
             binary: trypanophobe-linux-x64
             build_cmd: cargo build --release --target x86_64-unknown-linux-gnu
-            install_ort: false
           - os: ubuntu-latest
             use_docker: true
             name: Linux ARM64
             target: aarch64-unknown-linux-gnu
             binary: trypanophobe-linux-arm64
             build_cmd: cargo build --release --target aarch64-unknown-linux-gnu
-            install_ort: false
           - os: macos-latest
             use_docker: false
             name: macOS ARM64
             target: aarch64-apple-darwin
             binary: trypanophobe-darwin-arm64
             build_cmd: cargo build --release --target aarch64-apple-darwin
-            install_ort: false
           - os: macos-15-intel
             use_docker: false
             name: macOS x64
             target: x86_64-apple-darwin
             binary: trypanophobe-darwin-x64
             build_cmd: bash docker/darwin-x64-build.sh
-            install_ort: true
           - os: ubuntu-latest
             use_docker: true
             name: Windows x64
             target: x86_64-pc-windows-msvc
             binary: trypanophobe-win32-x64.exe
             build_cmd: bash docker/windows-cross-build.sh
-            install_ort: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -109,12 +104,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .cargo-home
-          key: cross-cargo-v4-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cross-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            cross-cargo-v4-${{ matrix.target }}-
+            cross-cargo-${{ matrix.target }}-
 
       - name: Install ONNX Runtime (macOS x64)
-        if: matrix.install_ort
+        if: matrix.name == 'macOS x64'
         run: brew install onnxruntime
 
       - name: Cross-compile release binary (Docker)
@@ -148,11 +143,6 @@ jobs:
           name: ${{ matrix.binary }}
           path: artifacts/
           retention-days: 7
-
-      - name: Prune build trees
-        if: always()
-        continue-on-error: true
-        run: bash scripts/ci-cleanup.sh
 
   nightly-release:
     name: Nightly release
@@ -217,13 +207,9 @@ jobs:
         run: |
           TAG=nightly
           NOTES="Automated build from ${{ github.sha }} on main."
-          if gh release view "$TAG" &>/dev/null; then
-            echo "Updating existing nightly release..."
-            gh release upload "$TAG" dist/* --clobber
-          else
-            echo "Creating nightly release..."
-            gh release create "$TAG" dist/* \
-              --title "Nightly" \
-              --prerelease \
-              --notes "$NOTES"
-          fi
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" dist/* \
+            --target "${{ github.sha }}" \
+            --title "Nightly" \
+            --prerelease \
+            --notes "$NOTES"

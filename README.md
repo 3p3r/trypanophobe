@@ -37,40 +37,27 @@ Open **http://127.0.0.1:9876/** in a browser for interactive API docs (Swagger U
 
 Use `--prewarm` to load the model in the background at startup (the server still listens right away).
 
-## Build
+## Tests
 
 ```bash
-cargo build --release
-```
-
-## Smoke tests
-
-```bash
+cargo test
 ./smoke.sh
 ./coverage.sh
 ```
 
-`smoke.sh` builds the binary, exercises CLI (`version`, non-English `check`), starts a temporary server, and hits `/`, `/api/version`, OpenAPI, Swagger UI, and `/api/check` (without loading the full model for English).
+`smoke.sh` exercises the CLI, starts a temporary server, and hits the HTTP API without loading the full model for English checks.
 
-## CI
+## Nightly binaries
 
-GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push and pull request to `main`:
+Every push to `main` runs tests and publishes a [nightly](https://github.com/3p3r/trypanophobe/releases/tag/nightly) pre-release (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
-- `cargo test`, `./coverage.sh` (90% line coverage on testable library code), and `./smoke.sh`
-
-On push to `main`, CI cross-compiles release binaries using [`docker/Dockerfile.build`](docker/Dockerfile.build) (Linux/Windows; Windows uses [`docker/windows-cross-build.sh`](docker/windows-cross-build.sh) for xwin SDK lib casing) and native macOS runners (`macos-latest` / `macos-15-intel`), then publishes them on the **nightly** pre-release.
-
-Intel macOS (`x86_64-apple-darwin`) has no ort 2.x prebuilt binaries; the nightly binary is built with [`docker/darwin-x64-build.sh`](docker/darwin-x64-build.sh) and links Homebrew ONNX Runtime at runtime (`brew install onnxruntime` required on Intel Macs).
-
-| Artifact | Target |
-|----------|--------|
-| [trypanophobe-linux-x64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-linux-x64) | x86_64-unknown-linux-gnu |
-| [trypanophobe-linux-arm64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-linux-arm64) | aarch64-unknown-linux-gnu |
-| [trypanophobe-darwin-arm64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-darwin-arm64) | aarch64-apple-darwin (Apple Silicon) |
-| [trypanophobe-darwin-x64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-darwin-x64) | x86_64-apple-darwin (Intel; requires `brew install onnxruntime`) |
-| [trypanophobe-win32-x64.exe](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-win32-x64.exe) | x86_64-pc-windows-msvc |
-
-After cross-compiles, CI runs [`scripts/ci-cleanup.sh`](scripts/ci-cleanup.sh) so `cross-target/` and `.cargo-home/` do not accumulate on runners.
+| Download | Platform |
+|----------|----------|
+| [trypanophobe-linux-x64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-linux-x64) | Linux x86_64 |
+| [trypanophobe-linux-arm64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-linux-arm64) | Linux ARM64 |
+| [trypanophobe-darwin-arm64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-darwin-arm64) | macOS Apple Silicon |
+| [trypanophobe-darwin-x64](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-darwin-x64) | macOS Intel ([`onnxruntime`](https://formulae.brew.sh/formula/onnxruntime) via Homebrew) |
+| [trypanophobe-win32-x64.exe](https://github.com/3p3r/trypanophobe/releases/download/nightly/trypanophobe-win32-x64.exe) | Windows x86_64 |
 
 ## License
 

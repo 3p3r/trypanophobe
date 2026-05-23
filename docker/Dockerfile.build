@@ -1,4 +1,3 @@
-# Debian trixie: glibc ≥2.38 for ort prebuilts (__isoc23_*); clang/lld for cargo-xwin.
 FROM rust:1-trixie
 
 RUN apt-get update && apt-get install -y \
