@@ -23,3 +23,5 @@ target
 .cargo-home
 cross-target/
 cross-target-*/
+artifacts/
+dist/

@@ -58,7 +58,7 @@ GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on 
 
 - `cargo test`, `./coverage.sh` (90% line coverage on testable library code), and `./smoke.sh`
 
-On push to `main`, CI cross-compiles release binaries using [`docker/Dockerfile.build`](docker/Dockerfile.build) (Linux/Windows) and native macOS runners, then publishes them on the **nightly** pre-release. Targets follow [ONNX Runtime prebuilt availability](https://ort.pyke.io/setup/linking) (no musl or Intel-mac ORT binaries).
+On push to `main`, CI cross-compiles release binaries using [`docker/Dockerfile.build`](docker/Dockerfile.build) (Linux/Windows; Windows uses [`docker/windows-cross-build.sh`](docker/windows-cross-build.sh) for xwin SDK lib casing) and native macOS runners, then publishes them on the **nightly** pre-release. Targets follow [ONNX Runtime prebuilt availability](https://ort.pyke.io/setup/linking) (no musl or Intel-mac ORT binaries).
 
 | Artifact | Target |
 |----------|--------|

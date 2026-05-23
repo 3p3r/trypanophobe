@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-const CHUNK_BYTES: &str = "10000000"; // 10 MiB
+const CHUNK_SIZE: usize = 10_000_000;
 const PROGRESS_INTERVAL: Duration = Duration::from_secs(3);
 const PROGRESS_STEP_BYTES: u64 = 50 * 1024 * 1024; // 50 MiB
 const MODEL_URL: &str = "https://huggingface.co/protectai/deberta-v3-base-prompt-injection-v2/resolve/main/onnx/model.onnx";
@@ -238,9 +238,8 @@ fn pack_and_compress(cache_dir: &Path, archive_xz: &Path, model_path: &Path, tok
 fn chunk_archive(archive_xz: &Path, out_dir: &Path) {
     remove_chunk_files(out_dir);
 
-    const CHUNK_SIZE: usize = 10_000_000;
     progress(format!(
-        "  chunking {} into ≤{CHUNK_BYTES} slices",
+        "  chunking {} into ≤{CHUNK_SIZE} byte slices",
         archive_xz.display()
     ));
 
